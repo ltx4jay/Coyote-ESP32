@@ -1,7 +1,8 @@
 //
-// Replace default values with the ones specific to your device and home environment.
+// Copy to 'secrets.h', then replace default values with the ones specific to your device and home environment.
 //
 
+// MAC address of your Coyote device
 const std::string MAC_ADDRESS("e2:8b:7b:xx:xx:xx");
 
 //
