@@ -102,6 +102,11 @@ struct WaveVal {
 static enum {DISCONNECTED, CONNECT, CONNECTED} connState = DISCONNECTED;
 
 
+void endScanCB(NimBLEScanResults res)
+{
+}
+    
+
 class ClientCallbacks : public NimBLEClientCallbacks
 {
     void onConnect(NimBLEClient* pClient)
@@ -116,7 +121,7 @@ class ClientCallbacks : public NimBLEClientCallbacks
 
         connState = DISCONNECTED;
 
-        NimBLEDevice::getScan()->start(0 /* forever */);
+        NimBLEDevice::getScan()->start(0 /* forever */, endScanCB);
     }
 
     /** Called when the peripheral requests a change to the connection parameters.
@@ -473,7 +478,7 @@ void setup() {
     /** Start scanning for advertisers for the scan time specified (in seconds) 0 = forever
      *  Optional callback for when scanning stops.
      */
-    pScan->start(0 /* forever */);
+    pScan->start(0 /* forever */, endScanCB);
 }
 
 
@@ -533,7 +538,7 @@ void loop()
         } else {
             Serial.println("Failed to connect, re-starting scan");
             connState = DISCONNECTED;
-            NimBLEDevice::getScan()->start(0 /* forever */);
+            NimBLEDevice::getScan()->start(0 /* forever */, endScanCB);
         }
         stamp     = now;
         break;
