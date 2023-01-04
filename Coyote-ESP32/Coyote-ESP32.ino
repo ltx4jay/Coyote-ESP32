@@ -13,7 +13,20 @@
  * See https://www.reddit.com/r/estim/comments/uadthp/dg_lab_coyote_review_by_an_electronics_engineer/ for more details.
  */
 
+#include <vector>
 
+#include <WiFi.h>
+#include <ESPmDNS.h>
+#include <WiFiUdp.h>
+#include <ArduinoOTA.h>
+
+#define CONFIG_BT_NIMBLE_PINNED_TO_CORE
+#include <NimBLEDevice.h>
+
+
+//
+// OTA Stuff
+//
 struct WiFiSSIDandPasswd {
    String ssid;
    String passwd;
@@ -22,22 +35,108 @@ struct WiFiSSIDandPasswd {
 #include "secrets.h"
 
 
-#include <WiFi.h>
-#include <ESPmDNS.h>
-#include <WiFiUdp.h>
-#include <ArduinoOTA.h>
+
 
 static bool hasOTA = false;
 
+bool waitForWiFiConnect(unsigned long timeoutLength = 60000)
+{
+    unsigned long start = millis();
+    while ((!WiFi.status() || WiFi.status() >= WL_DISCONNECTED) && (millis() - start) < timeoutLength) {
+        delay(100);
+    }
+    return WiFi.status() == WL_CONNECTED;
+}
 
-#define CONFIG_BT_NIMBLE_PINNED_TO_CORE
-#include <NimBLEDevice.h>
 
+void initOTA()
+{
+    Serial.println("Starting OTA server");
+    WiFi.mode(WIFI_STA);
+
+    int scanResult = WiFi.scanNetworks(/*async=*/false, /*hidden=*/true);
+    if (scanResult == 0) {
+        Serial.println("No WiFi networks found. Disbling OTA");
+    } else if (scanResult > 0) {
+       for (int8_t i = 0; i < scanResult; i++) {
+           String ssid;
+           int32_t rssi;
+           uint8_t encryptionType;
+           uint8_t *bssid;
+           int32_t channel;
+     
+           WiFi.getNetworkInfo(i, ssid, encryptionType, rssi, bssid, channel);
+           for (auto& it : WifiCredentials) {
+               if (ssid == it.ssid) {
+                  WiFi.begin(ssid.c_str(), it.passwd.c_str());
+                  if (waitForWiFiConnect()) {
+                     Serial.printf("Connected to %s. Enabling OTA.", ssid.c_str());
+                     hasOTA = true;
+                  }
+               break;
+              }
+          }
+       }
+    }
+
+    if (hasOTA) {
+        // Port defaults to 3232
+        // ArduinoOTA.setPort(3232);
+      
+        // Hostname defaults to esp3232-[MAC]
+        ArduinoOTA.setHostname("CoyoteESP32");
+      
+        // No authentication by default
+        // ArduinoOTA.setPassword("admin");
+      
+        // Password can be set with it's md5 value as well
+        // MD5(admin) = 21232f297a57a5a743894a0e4a801fc3
+        // ArduinoOTA.setPasswordHash("21232f297a57a5a743894a0e4a801fc3");
+      
+        ArduinoOTA
+          .onStart([]() {
+            String type;
+            if (ArduinoOTA.getCommand() == U_FLASH)
+              type = "sketch";
+            else // U_SPIFFS
+              type = "filesystem";
+      
+            // NOTE: if updating SPIFFS this would be the place to unmount SPIFFS using SPIFFS.end()
+            Serial.println("Start updating " + type);
+          })
+          .onEnd([]() {
+            Serial.println("\nEnd");
+          })
+          .onProgress([](unsigned int progress, unsigned int total) {
+            Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
+          })
+          .onError([](ota_error_t error) {
+            Serial.printf("Error[%u]: ", error);
+            if (error == OTA_AUTH_ERROR) Serial.println("Auth Failed");
+            else if (error == OTA_BEGIN_ERROR) Serial.println("Begin Failed");
+            else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
+            else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive Failed");
+            else if (error == OTA_END_ERROR) Serial.println("End Failed");
+          });
+      
+        ArduinoOTA.begin();
+      
+        Serial.println("OTA Ready");
+        Serial.print("IP address: ");
+        Serial.println(WiFi.localIP());
+    }
+}
+
+
+//
+// Coyote BLE Stuff
+//
 
 static NimBLEAdvertisedDevice* myCoyote;
 NimBLERemoteCharacteristic* charPower = nullptr;
 NimBLERemoteCharacteristic* charWaveA = nullptr;
 NimBLERemoteCharacteristic* charWaveB = nullptr;
+
 
 // Power and waveform encodings, transmitted LSB first 3 bytes only
 static struct CFGval {
@@ -344,98 +443,8 @@ bool connectToServer() {
 }
 
 
-bool waitForWiFiConnect(unsigned long timeoutLength = 60000)
+void initCoyote()
 {
-    unsigned long start = millis();
-    while ((!WiFi.status() || WiFi.status() >= WL_DISCONNECTED) && (millis() - start) < timeoutLength) {
-        delay(100);
-    }
-    return WiFi.status() == WL_CONNECTED;
-}
-
-
-void setup() {
-    Serial.begin(115200);
-
-    pinMode(LED_BUILTIN, OUTPUT);
-    digitalWrite(LED_BUILTIN, 1);
-
-    Serial.println("Starting OTA server");
-    WiFi.mode(WIFI_STA);
-
-    int scanResult = WiFi.scanNetworks(/*async=*/false, /*hidden=*/true);
-    if (scanResult == 0) {
-        Serial.println("No WiFi networks found. Disbling OTA");
-    } else if (scanResult > 0) {
-       for (int8_t i = 0; i < scanResult; i++) {
-           String ssid;
-           int32_t rssi;
-           uint8_t encryptionType;
-           uint8_t *bssid;
-           int32_t channel;
-     
-           WiFi.getNetworkInfo(i, ssid, encryptionType, rssi, bssid, channel);
-           for (auto& it : WifiCredentials) {
-               if (ssid == it.ssid) {
-                  WiFi.begin(ssid.c_str(), it.passwd.c_str());
-                  if (waitForWiFiConnect()) {
-                     Serial.printf("Connected to %s. Enabling OTA.", ssid.c_str());
-                     hasOTA = true;
-                  }
-               break;
-              }
-          }
-       }
-    }
-
-    if (hasOTA) {
-        // Port defaults to 3232
-        // ArduinoOTA.setPort(3232);
-      
-        // Hostname defaults to esp3232-[MAC]
-        ArduinoOTA.setHostname("CoyoteESP32");
-      
-        // No authentication by default
-        // ArduinoOTA.setPassword("admin");
-      
-        // Password can be set with it's md5 value as well
-        // MD5(admin) = 21232f297a57a5a743894a0e4a801fc3
-        // ArduinoOTA.setPasswordHash("21232f297a57a5a743894a0e4a801fc3");
-      
-        ArduinoOTA
-          .onStart([]() {
-            String type;
-            if (ArduinoOTA.getCommand() == U_FLASH)
-              type = "sketch";
-            else // U_SPIFFS
-              type = "filesystem";
-      
-            // NOTE: if updating SPIFFS this would be the place to unmount SPIFFS using SPIFFS.end()
-            Serial.println("Start updating " + type);
-          })
-          .onEnd([]() {
-            Serial.println("\nEnd");
-          })
-          .onProgress([](unsigned int progress, unsigned int total) {
-            Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
-          })
-          .onError([](ota_error_t error) {
-            Serial.printf("Error[%u]: ", error);
-            if (error == OTA_AUTH_ERROR) Serial.println("Auth Failed");
-            else if (error == OTA_BEGIN_ERROR) Serial.println("Begin Failed");
-            else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
-            else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive Failed");
-            else if (error == OTA_END_ERROR) Serial.println("End Failed");
-          });
-      
-        ArduinoOTA.begin();
-      
-        Serial.println("OTA Ready");
-        Serial.print("IP address: ");
-        Serial.println(WiFi.localIP());
-    }
-
-
     Serial.println("Starting NimBLE Client");
     NimBLEDevice::init("");
 
@@ -482,6 +491,32 @@ void setup() {
 }
 
 
+void setPower(uint8_t powA, uint8_t powB)
+{
+    const bool noResponse = false;
+
+    charPower->writeValue(PowerVal(powA, powB), 3, noResponse);
+}
+
+
+void setWave(NimBLERemoteCharacteristic* waveChar, struct WaveVal &val)
+{
+    const bool noResponse = false;
+    waveChar->writeValue(val, 3, noResponse);
+}
+
+
+void setup() {
+    Serial.begin(115200);
+
+    pinMode(LED_BUILTIN, OUTPUT);
+    digitalWrite(LED_BUILTIN, 1);
+
+    initOTA();
+    initCoyote();
+}
+
+
 void setLED(int to = -1 /*Toggle*/)
 {
    static bool ledState = true;
@@ -490,8 +525,6 @@ void setLED(int to = -1 /*Toggle*/)
    else ledState = to;
    digitalWrite(LED_BUILTIN, ledState);
 }
-
-const bool noResponse = false;
 
 std::vector<WaveVal> waveA = {WaveVal(1, 9, 16)};
 std::vector<WaveVal> waveB =  // "GrainTouch" pre-defined waveform
@@ -534,7 +567,7 @@ void loop()
         if (connectToServer()) {
             connState = CONNECTED;
             setLED(0);
-            charPower->writeValue(PowerVal(25, 25), 3, noResponse);
+            setPower(25, 25);
         } else {
             Serial.println("Failed to connect, re-starting scan");
             connState = DISCONNECTED;
@@ -546,10 +579,10 @@ void loop()
       case CONNECTED:
         if (now - stamp >= 99) {
 
-           charWaveA->writeValue(*waveAIter++, 3, noResponse);
+           setWave(charWaveA, *waveAIter++);
            if (waveAIter == waveA.end()) waveAIter = waveA.begin();                
 
-           charWaveB->writeValue(*waveBIter++, 3, noResponse);
+           setWave(charWaveB, *waveBIter++);
            if (waveBIter == waveB.end()) waveBIter = waveB.begin();
 
            stamp = now;

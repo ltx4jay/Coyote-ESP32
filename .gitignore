@@ -1,4 +1,10 @@
 secrets.h
+*~
+
+# Arduino-generated files
+debug.cfg
+debug_custom.json
+*.svd
 
 # Prerequisites
 *.d
