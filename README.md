@@ -23,7 +23,7 @@ Open 'Coyote-ESP32.ino' with the Arduino IDE, compile and upload to an ESP-32 bo
 After reset, the controller will go though the following sequence, indicated by the on-board LED:
 
 1. Solid LED: Scanning for then connecting to WiFi network if one is found.
-2. Flashing LED: Controller is scanning for Coyote device.
+2. Flashing LED: Controller is scanning for Coyote device and accepts OTA updates.
 3. Solid LED: Controller has found the Coyote device and is connecting.
 4. LED off: Controller is connected to the Coyote device and generating waveforms.
 
