@@ -155,7 +155,7 @@ static struct PowerVal {
 
     // Power values as number of steps (i.e. what is displayed on the app)
     PowerVal(uint8_t a, uint8_t b)
-    : B(((a < 100) ? b : MAXPOWER) * gCfg.step)
+    : B(((b < 100) ? b : MAXPOWER) * gCfg.step)
     , A(((a < 100) ? a : MAXPOWER) * gCfg.step)
     , rsvd(0)
     {}
