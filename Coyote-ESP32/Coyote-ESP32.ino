@@ -14,6 +14,10 @@
  */
 
 #include <vector>
+#include <stdint.h>
+
+#include "Waveforms.h"
+
 
 #include <WiFi.h>
 #include <ESPmDNS.h>
@@ -138,64 +142,7 @@ NimBLERemoteCharacteristic* charWaveA = nullptr;
 NimBLERemoteCharacteristic* charWaveB = nullptr;
 
 
-// Power and waveform encodings, transmitted LSB first 3 bytes only
-static struct CFGval {
-    uint32_t   step    :  8;
-    uint32_t   maxPwr  : 11;
-    uint32_t   rsvd    : 13; 
-} gCfg = {7, 2000, 0};
-
-static struct PowerVal {
-    // Maximum power level allowed to be specified
-    static const uint32_t MAXPOWER = 100;
-
-    uint32_t  B    : 11;
-    uint32_t  A    : 11;
-    uint32_t  rsvd : 10;
-
-    // Power values as number of steps (i.e. what is displayed on the app)
-    PowerVal(uint8_t a, uint8_t b)
-    : B(((b < 100) ? b : MAXPOWER) * gCfg.step)
-    , A(((a < 100) ? a : MAXPOWER) * gCfg.step)
-    , rsvd(0)
-    {}
-
-    // Values are sent in little-endian order
-    operator uint8_t*() const
-      {
-          return (uint8_t*) this;
-      }
-} gPower(0, 0);
-
-struct WaveVal {
-    uint32_t   x    :  5;
-    uint32_t   y    : 10;
-    uint32_t   z    :  5;
-    uint32_t   rsvd : 12; 
-
-    WaveVal(uint8_t X, uint16_t Y, uint8_t Z)
-    : x(X)
-    , y(Y)
-    , z(Z)
-    , rsvd(0)
-    {}
-
-    // Construct a wave from observed transmitted values, in transmit order
-    WaveVal(std::vector<uint8_t> bytes)
-    {
-        // Make sure there are 3 bytes
-        while (bytes.size() < 3) bytes.push_back(0x00);
-
-        auto b = (uint8_t*) this;
-        for (unsigned int i = 0; i < 3; i++) b[i] = bytes[i];
-    }
-
-    // Values are sent in little-endian order
-    operator uint8_t*() const
-      {
-          return (uint8_t*) this;
-      }
-};
+static PowerVal gPower(0, 0);
 
 
 static enum {DISCONNECTED, CONNECT, CONNECTED} connState = DISCONNECTED;
@@ -264,7 +211,7 @@ void notifyBattery(NimBLERemoteCharacteristic* pRemoteCharacteristic, uint8_t* p
 void notifyPower(NimBLERemoteCharacteristic* pRemoteCharacteristic, uint8_t* pData, size_t length, bool isNotify)
 {
     gPower = *((PowerVal*) pData);
-    Serial.printf("Power Setting  A:%3d  B:%3d\n", gPower.A/gCfg.step, gPower.B/gCfg.step);
+    Serial.printf("Power Setting  A:%3d  B:%3d\n", gPower.A/gCoyoteCfg.step, gPower.B/gCoyoteCfg.step);
 }
 
 void notifyUnidentified(NimBLERemoteCharacteristic* pRemoteCharacteristic, uint8_t* pData, size_t length, bool isNotify)
@@ -414,8 +361,8 @@ bool connectToServer() {
         return false;
     }
 
-    gCfg = *((CFGval*) cfg->readValue().data());
-    Serial.printf("Max Power: %d/%d = %d\n", gCfg.maxPwr, gCfg.step, gCfg.maxPwr/gCfg.step);
+    gCoyoteCfg = *((CFGval*) cfg->readValue().data());
+    Serial.printf("Max Power: %d/%d = %d\n", gCoyoteCfg.maxPwr, gCoyoteCfg.step, gCoyoteCfg.maxPwr/gCoyoteCfg.step);
 
     charPower->subscribe(true, notifyPower, false);
     
@@ -526,20 +473,8 @@ void setLED(int to = -1 /*Toggle*/)
    digitalWrite(LED_BUILTIN, ledState);
 }
 
-std::vector<WaveVal> waveA = {WaveVal(1, 9, 16)};
-std::vector<WaveVal> waveB =  // "GrainTouch" pre-defined waveform
-                             {WaveVal(std::vector<uint8_t>({0xE1, 0x03, 0x00})),
-                              WaveVal(std::vector<uint8_t>({0xE1, 0x03, 0x0A})),
-                              WaveVal(std::vector<uint8_t>({0xA1, 0x04, 0x0A})),
-                              WaveVal(std::vector<uint8_t>({0xC1, 0x05, 0x0A})),
-                              WaveVal(std::vector<uint8_t>({0x01, 0x07, 0x00})),
-                              WaveVal(std::vector<uint8_t>({0x21, 0x01, 0x0A})),
-                              WaveVal(std::vector<uint8_t>({0x61, 0x01, 0x0A})),
-                              WaveVal(std::vector<uint8_t>({0xA1, 0x01, 0x0A})),
-                              WaveVal(std::vector<uint8_t>({0x01, 0x02, 0x00})),
-                              WaveVal(std::vector<uint8_t>({0x01, 0x02, 0x0A})),
-                              WaveVal(std::vector<uint8_t>({0x81, 0x02, 0x0A})),
-                              WaveVal(std::vector<uint8_t>({0x21, 0x03, 0x0A}))};
+auto waveA = DGLABS::AudioBase;
+auto waveB = DGLABS::GrainTouch;
 
 auto waveAIter = waveA.begin();
 auto waveBIter = waveB.begin();
