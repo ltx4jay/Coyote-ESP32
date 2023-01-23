@@ -117,6 +117,9 @@ const Waveform AudioBase = {WaveVal(1, 9, 16)};
 // Some other interesting waveforms. Contributions welcome.
 //
 
+
+namespace LTX4JAY {
+
 const Waveform IntenseVibration = {WaveVal(1, 9, 22)};
 
 
@@ -157,3 +160,4 @@ const Waveform MediumWave = {WaveVal(1, 9, 4),
                              WaveVal(1, 9, 10),
                              WaveVal(1, 9, 6)};
 
+};
